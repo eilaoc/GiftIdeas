@@ -1,28 +1,18 @@
-# === This only works with python 3.12 or less so need to figure out a way to do that ===
-
-
 import os
 import pandas as pd
 from tqdm import tqdm
 import kagglehub
 import json
-
-from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
-import torch
+import spacy
 
 # === CONFIGURATION ===
-MODEL_NAME = "t5-small"  # Or your fine-tuned model path here
 CACHE_FILE = "simplify_cache.json"
 OUTPUT_CSV = "generalized_gift_ideas.csv"
 INR_TO_GBP = 0.0085
 
-# === Setup tokenizer and model ===
-print("Loading model and tokenizer...")
-tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
-model = AutoModelForSeq2SeqLM.from_pretrained(MODEL_NAME)
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-model.to(device)
-model.eval()
+# === Setup spaCy ===
+print("Loading spaCy model...")
+nlp = spacy.load("en_core_web_sm")
 
 tqdm.pandas()
 
@@ -56,26 +46,37 @@ df = df[[c for c in needed_cols if c in df.columns]]
 print(f"\n🧾 Total products loaded: {len(df)}")
 print("🧪 Sample:", df['name'].iloc[0])
 
-# === Simplify function using model inference ===
+# === Reduce dataset size by stratified sampling on 'main_category' ===
+sample_per_group = 1000  # Adjust this number based on desired dataset size
+
+sampled_dfs = []
+for group, group_df in df.groupby('main_category'):
+    sampled = group_df.sample(n=min(sample_per_group, len(group_df)), random_state=42)
+    sampled_dfs.append(sampled)
+
+df = pd.concat(sampled_dfs).reset_index(drop=True)
+
+print(f"\n🧾 Total products after sampling: {len(df)}")
+
+
+
+# === Simplify function using spaCy noun chunks ===
 def generalize_product_name(name):
     if name in simplify_cache:
         return simplify_cache[name]
 
-    # Prepare input for T5/BART: prefix + text (you can customize prompt)
-    input_text = f"summarize: {name}"
-    inputs = tokenizer.encode(input_text, return_tensors="pt", max_length=128, truncation=True).to(device)
+    doc = nlp(name)
+    # Extract noun chunks, choose the longest one (heuristic for "main product idea")
+    noun_chunks = [chunk.text.strip() for chunk in doc.noun_chunks if len(chunk.text.strip()) > 1]
+    if noun_chunks:
+        # Pick the longest noun chunk as simplified idea
+        simplified = max(noun_chunks, key=len)
+    else:
+        # fallback: take first 2 words
+        simplified = ' '.join(name.split()[:2])
 
-    # Generate output sequence
-    with torch.no_grad():
-        outputs = model.generate(
-            inputs, 
-            max_length=10,  # gift ideas are short
-            num_beams=5,
-            early_stopping=True
-        )
-    generalized_name = tokenizer.decode(outputs[0], skip_special_tokens=True).strip()
-    simplify_cache[name] = generalized_name
-    return generalized_name
+    simplify_cache[name] = simplified
+    return simplified
 
 # === Run generalization on dataset ===
 print("\n🧠 Generating gift ideas...")
