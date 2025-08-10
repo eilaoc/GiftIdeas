@@ -48,26 +48,37 @@ def clean_text(text):
 df['clean_name'] = df['name'].apply(clean_text)
 
 # === Vectorize product names ===
-print("\n🔠 Vectorizing product names...")
-vectorizer = TfidfVectorizer(stop_words='english')
-X = vectorizer.fit_transform(df['clean_name'])
+print("\n📊 Step 1: Vectorizing product names...")
+vectorizer = TfidfVectorizer(stop_words='english', max_features=5000)
+X = vectorizer.fit_transform(tqdm(df['clean_name'], desc="Vectorizing"))
 
-# === Cluster products ===
-print("🤖 Clustering products...")
+# === Cluster product names ===
+print("\n🧠 Step 2: Clustering product names...")
 n_clusters = 100  # adjust depending on how granular you want categories
-kmeans = KMeans(n_clusters=n_clusters, random_state=42, n_init=10)
+kmeans = KMeans(n_clusters=n_clusters, random_state=42, verbose=1, n_init=10)  # verbose=1 shows progress
 df['cluster'] = kmeans.fit_predict(X)
+
 
 # === Find best representative label for each cluster ===
 def clean_label(name):
     name = re.sub(r"\(.*?\)", "", name)
     name = re.sub(r"\[.*?\]", "", name)
+    # Remove brand names (first word if it looks like a brand)
+    name_parts = name.split()
+    if len(name_parts) > 1:
+        # Drop first word if it looks like a brand (capitalized word)
+        if name_parts[0][0].isupper():
+            name_parts = name_parts[1:]
+    name = " ".join(name_parts)
+    # Remove possessives and extra spaces
+    name = re.sub(r"'s\b", "", name)
     name = re.sub(r"\s+", " ", name).strip()
     return name.title()
 
+
 def get_cluster_labels_from_center(X, kmeans, df):
     labels = {}
-    for cluster_id in range(kmeans.n_clusters):
+    for cluster_id in tqdm(range(kmeans.n_clusters), desc="📌 Labelling clusters"):
         idxs = df[df['cluster'] == cluster_id].index
         if len(idxs) == 0:
             labels[cluster_id] = f"Cluster {cluster_id}"
