@@ -1,66 +1,89 @@
 import os
 import pandas as pd
-import openai
 from tqdm import tqdm
+from openai import OpenAI
+import kagglehub
+import json
 
 # === CONFIGURATION ===
-OPENAI_API_KEY = "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"  # ← Replace with your real key
+OPENAI_API_KEY = "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"  # ← Replace with your real key"  # Replace with your key
 INR_TO_GBP = 0.0085
 OUTPUT_CSV = "generalized_gift_ideas.csv"
+CACHE_FILE = "gpt_cache.json"
 
-# === Set up OpenAI API ===
-openai.api_key = OPENAI_API_KEY
+# === Setup ===
+client = OpenAI(api_key=OPENAI_API_KEY)
 tqdm.pandas()
 
-# === Get path to Kaggle dataset (already downloaded using kagglehub) ===
-import kagglehub
+# === Load GPT cache if exists ===
+if os.path.exists(CACHE_FILE):
+    with open(CACHE_FILE, "r", encoding="utf-8") as f:
+        gpt_cache = json.load(f)
+else:
+    gpt_cache = {}
+
+# === Get path to Kaggle dataset ===
+print("📦 Downloading/loading dataset from Kaggle...")
 path = kagglehub.dataset_download("lokeshparab/amazon-products-dataset")
 
-# === Load and combine all CSVs ===
-print("📦 Loading all product CSVs...")
+# === Load and combine CSVs ===
+print("📂 Loading CSV files...")
 all_files = [f for f in os.listdir(path) if f.endswith('.csv')]
-
 dataframes = []
 for file in all_files:
-    file_path = os.path.join(path, file)
     try:
-        df = pd.read_csv(file_path)
+        df = pd.read_csv(os.path.join(path, file))
         dataframes.append(df)
         print(f"✅ Loaded: {file}")
     except Exception as e:
-        print(f"⚠️ Failed to load {file}: {e}")
+        print(f"⚠️ Could not load {file}: {e}")
 
 df = pd.concat(dataframes, ignore_index=True)
 
-# === Clean and preview ===
-expected_columns = ['name', 'main_category', 'sub_category', 'ratings', 'discount_price']
-df = df[[col for col in expected_columns if col in df.columns]]
+# === Keep only needed columns ===
+needed_cols = ['name', 'main_category', 'sub_category', 'ratings', 'actual_price']
+df = df[[c for c in needed_cols if c in df.columns]]
 
 print(f"\n🧾 Total products loaded: {len(df)}")
-print("🧪 Sample product:", df['name'].iloc[0])
+print("🧪 Sample:", df['name'].iloc[0])
 
-# === GPT-based generalization ===
+# === GPT generalization function ===
 def generalize_product_name(name):
-    prompt = f"Generalize the following product name into a broad gift idea type (e.g., 'Bluetooth Speaker', 'Home Gym Set', 'Leather Journal', etc.):\n\nProduct: {name}\n\nGeneral Gift Idea:"
+    if name in gpt_cache:
+        return gpt_cache[name]  # Use cached result
+
+    prompt = (
+        f"Generalize the following product name into a broad gift idea type "
+        f"(e.g., 'Bluetooth Speaker', 'Home Gym Set', 'Leather Journal'). "
+        f"Only return the general gift type, nothing else.\n\nProduct: {name}\n\nGeneral Gift Idea:"
+    )
+
     try:
-        response = openai.ChatCompletion.create(
-            model="gpt-4",
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",
             messages=[
-                {"role": "system", "content": "You're a helpful assistant that generalizes product names into gift idea types."},
+                {"role": "system", "content": "You are a product name generalizer. Output only short, generalized gift idea categories."},
                 {"role": "user", "content": prompt}
             ],
-            max_tokens=20,
-            temperature=0.3
+            temperature=0
         )
-        return response.choices[0].message['content'].strip()
+        generalized_name = response.choices[0].message.content.strip()
+        gpt_cache[name] = generalized_name  # Cache result
+        return generalized_name
     except Exception as e:
         print(f"❌ GPT failed on: {name[:40]}... | Error: {e}")
+        gpt_cache[name] = "Unknown"
         return "Unknown"
 
-print("\n🧠 Generating gift idea types from product names...")
+# === Run GPT generalization ===
+print("\n🧠 Generating gift ideas...")
 df['gift_idea'] = df['name'].progress_apply(generalize_product_name)
 
-# === Convert price to GBP ===
+# === Save updated cache ===
+with open(CACHE_FILE, "w", encoding="utf-8") as f:
+    json.dump(gpt_cache, f, ensure_ascii=False, indent=2)
+
+# === Convert INR → GBP ===
 def inr_to_gbp(value):
     try:
         value = str(value).replace(',', '').replace('₹', '').strip()
@@ -68,7 +91,7 @@ def inr_to_gbp(value):
     except:
         return None
 
-df['price_gbp'] = df['discount_price'].apply(inr_to_gbp)
+df['price_gbp'] = df['actual_price'].apply(inr_to_gbp)
 df['ratings'] = pd.to_numeric(df['ratings'], errors='coerce')
 
 # === Group by gift idea ===
