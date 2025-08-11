@@ -48,10 +48,19 @@ for file in all_files:
     except Exception as e:
         print(f"⚠️ Could not load {file}: {e}")
 
+# After concatenating all dataframes:
 df = pd.concat(dataframes, ignore_index=True)
 
+# --- SAMPLE THE DATASET ---
+sample_size = 100  # or set a fraction like 0.1 for 10%
+if len(df) > sample_size:
+    df = df.sample(n=sample_size, random_state=42).reset_index(drop=True)
+print(f"Sampled dataset size: {len(df)}")
+
+# Then continue with your existing column filtering etc.
 needed_cols = ['name', 'main_category', 'sub_category', 'ratings', 'actual_price']
 df = df[[c for c in needed_cols if c in df.columns]]
+
 
 print(f"\n🧾 Total products loaded: {len(df)}")
 print("🧪 Sample:", df['name'].iloc[0])

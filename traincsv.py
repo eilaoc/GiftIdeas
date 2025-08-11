@@ -1,0 +1,189 @@
+import os
+import re
+import pandas as pd
+from collections import Counter
+from itertools import islice
+import kagglehub
+
+print("📦 Downloading dataset...")
+path = kagglehub.dataset_download("lokeshparab/amazon-products-dataset")
+
+print("📂 Loading CSV files...")
+dataframes = []
+for file in os.listdir(path):
+    if file.endswith(".csv"):
+        try:
+            df = pd.read_csv(os.path.join(path, file))
+            dataframes.append(df)
+            print(f"✅ Loaded: {file}")
+        except Exception as e:
+            print(f"⚠️ Could not load {file}: {e}")
+
+df = pd.concat(dataframes, ignore_index=True)
+df = df[['name', 'main_category']].dropna()
+
+keyword_map = {
+    "umbrella": "Umbrella",
+    "headphone": "Headphones",
+    "earbuds": "Earbuds",
+    "trolley": "Trolley Bag",
+    "backpack": "Backpack",
+    "necklace": "Necklace",
+    "watch": "Watch",
+    "shoes": "Shoes",
+    "sofa": "Sofa",
+    "mixer": "Mixer Grinder",
+    "camera": "Camera",
+    "microwave": "Microwave",
+    "guitar": "Guitar",
+    "football": "Football",
+    "basketball": "Basketball",
+    "t-shirt": "T-Shirt",
+    "shirt": "Shirt",
+    "jacket": "Jacket",
+    "earring": "Earrings",
+    "ring": "Ring"
+}
+
+current_keywords = set(keyword_map.keys())
+
+def tokenize(text):
+    return re.findall(r'\b\w+\b', text.lower())
+
+all_names = df['name'].dropna()
+
+all_words = []
+for name in all_names:
+    all_words.extend(tokenize(name))
+
+def get_bigrams(words):
+    return zip(words, islice(words, 1, None))
+
+all_bigrams = []
+for name in all_names:
+    words = tokenize(name)
+    all_bigrams.extend([' '.join(bigram) for bigram in get_bigrams(words)])
+
+word_counts = Counter(all_words)
+bigram_counts = Counter(all_bigrams)
+
+# Define stopwords (same as you had)
+stopwords = set([
+    # demographics / gender
+    'women', 'men', 'mens', 'girls', 'boys', 'unisex', 'adult', 'baby', 'kids',
+    # colors
+    'black', 'white', 'blue', 'yellow', 'brown', 'green', 'grey', 'red', 'pink',
+    'orange', 'purple', 'violet', 'gold', 'silver', 'rose',
+    # sizes / fits / styles
+    'fit', 'regular', 'slim', 'casual', 'formal', 'stylish', 'free', 'mini', 'full', 'half',
+    # common adjectives / descriptors
+    'new', 'best', 'latest', 'soft', 'portable', 'light', 'solid', 'round', 'high',
+    'compatible', 'wireless', 'bluetooth', 'digital', 'analog',
+    # generic product words (to ignore these because too generic or often modifiers)
+    'pack', 'set', 'box', 'price', 'offer', 'quality', 'made', 'material', 'case',
+    'sale', 'product', 'wear', 'combo',
+    # brands / model words (common ones)
+    'amazon', 'brand', 'van', 'heusen', 'polo', 'assn', 'boost', 'bass', 'remote',
+    # suffixes for verb/adjective forms to avoid
+    'ing', 'ed', 'ly', 'er', 'or', 'ion', 'ive',
+    # other generic terms
+    'top', 'piece', 'strap', 'dial', 'sound', 'inch', 'sleeve',
+
+    # common stopwords
+    "i", "me", "my", "myself", "we", "our", "ours", "ourselves",
+    "you", "your", "yours", "yourself", "yourselves", "he", "him",
+    "his", "himself", "she", "her", "hers", "herself", "it", "its",
+    "itself", "they", "them", "their", "theirs", "themselves", "what",
+    "which", "who", "whom", "this", "that", "these", "those", "am",
+    "is", "are", "was", "were", "be", "been", "being", "have", "has",
+    "had", "having", "do", "does", "did", "doing", "a", "an", "the",
+    "and", "but", "if", "or", "because", "as", "until", "while", "of",
+    "at", "by", "for", "with", "about", "against", "between", "into",
+    "through", "during", "before", "after", "above", "below", "to",
+    "from", "up", "down", "in", "out", "on", "off", "over", "under",
+    "again", "further", "then", "once", "here", "there", "when", "where",
+    "why", "how", "all", "any", "both", "each", "few", "more", "most",
+    "other", "some", "such", "no", "nor", "not", "only", "own", "same",
+    "so", "than", "too", "very", "s", "t", "can", "will", "just", "don",
+    "should", "now"
+])
+
+def looks_like_noun(word):
+    bad_suffixes = ('ing', 'ed', 'ly', 'er', 'or', 'ion', 'ive')
+    if any(word.endswith(suf) for suf in bad_suffixes):
+        return False
+    if word in stopwords:
+        return False
+    return True
+
+def phrase_is_clean(phrase):
+    return all(looks_like_noun(w) and w not in stopwords for w in phrase.split())
+
+candidate_words = [
+    (word, count) for word, count in word_counts.items()
+    if word not in current_keywords and len(word) > 2 and looks_like_noun(word)
+]
+
+candidate_bigrams = [
+    (phrase, count) for phrase, count in bigram_counts.items()
+    if phrase_is_clean(phrase)
+]
+
+candidate_words.sort(key=lambda x: x[1], reverse=True)
+candidate_bigrams.sort(key=lambda x: x[1], reverse=True)
+
+print("\nInteractive keyword approval:")
+approved_keywords = {}
+
+def approve_candidates(candidates, is_bigram=False):
+    for phrase, count in candidates:
+        display = phrase.title() if is_bigram else phrase.capitalize()
+        while True:
+            ans = input(f"Approve '{display}' (count={count})? (y/n/q): ").strip().lower()
+            if ans == 'y':
+                approved_keywords[phrase] = display
+                break
+            elif ans == 'n':
+                break
+            elif ans == 'q':
+                print("Stopping approval process early.")
+                return False
+            else:
+                print("Please enter y (yes), n (no), or q (quit).")
+    return True
+
+print("\nApprove single-word candidates:")
+if not approve_candidates(candidate_words[:50], is_bigram=False):
+    pass
+
+print("\nApprove bigram candidates:")
+if not approve_candidates(candidate_bigrams[:30], is_bigram=True):
+    pass
+
+print("\n✅ Approved keywords:")
+for k, v in approved_keywords.items():
+    print(f"{k}: {v}")
+
+# Update keyword_map with approved keywords
+keyword_map.update(approved_keywords)
+
+def simplify_name(name):
+    name_lower = name.lower()
+    for kw in sorted(keyword_map.keys(), key=len, reverse=True):
+        if re.search(rf"\b{re.escape(kw)}\b", name_lower):
+            return keyword_map[kw]
+    return name.split(",")[0].split("|")[0].strip()
+
+df['simplified_idea'] = df['name'].apply(simplify_name)
+
+sample_size = 15
+balanced_dfs = []
+for cat, group_df in df.groupby('main_category'):
+    balanced_dfs.append(group_df.sample(n=min(sample_size, len(group_df)), random_state=42))
+
+balanced_df = pd.concat(balanced_dfs)
+
+balanced_df.rename(columns={'name': 'product_name'}, inplace=True)
+balanced_df[['product_name', 'simplified_idea']].to_csv("train.csv", index=False)
+
+print(f"\n✅ Balanced dataset saved to train.csv with {len(balanced_df)} rows")
