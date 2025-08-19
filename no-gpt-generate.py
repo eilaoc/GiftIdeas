@@ -1,3 +1,26 @@
+#this is a no-gpt version of the simplifying generator, it uses clustering and regex, didn't work very well though
+
+#Clustering - "unsupervised machine learning technique" to group similar data into clusters 
+#              (supervised learning uses labelled training data, it may know what the output should be)
+
+#  1. First it cleans the names by removing unnecessary punctuation etc  (64)
+
+#  2. Then it vectorizes the text (turns it into numbers, TF-IDF vectorization)  (75)
+#     Each product becomes a coordinate in vector space
+
+#  3. Words that are common are downweighted, words that are nique are upweighted  (75)
+#     So "wireless mouse" and "bluetooth mouse" will be closer together than "dog leash"
+
+#  4. Kmeans tries to split all the products into 100 clusters, grouping products with similar TF-IDF numbers  (81)
+#     (Products like:"Bluetooth Speaker""Portable Wireless Speaker""Mini Bluetooth Soundbox" would likely go into the same cluster.)
+
+#  5. Then it labels each cluster (gift idea) by finding product closest to cluster center   (102-116)
+#     A cluster might be named “Wireless Speaker” even though it contains items like “JBL Soundbox” and “Bluetooth Speaker - Red”.
+
+#This doesn't really work for the amazon products though because they are so varied and long which is why the cluster names weren't accurate
+
+
+
 import os
 import re
 import pandas as pd

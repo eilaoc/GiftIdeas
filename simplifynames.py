@@ -1,3 +1,6 @@
+#this was used to generate a small training file of simplified names for the ai
+
+
 import os
 import re
 import json

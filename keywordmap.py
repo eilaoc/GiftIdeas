@@ -1,3 +1,7 @@
+#this was used to generate common stopwords and keywords to supply to simplifynames so it could make a small train set for the ai
+
+
+
 import os
 import re
 import json

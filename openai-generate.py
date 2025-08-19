@@ -1,32 +1,34 @@
+#a simple method to generate the simplified names by using openai, needs a paid subscription to the service though so i didn't use it
+
 import os
 import pandas as pd
 from tqdm import tqdm
+from openai import OpenAI
 import kagglehub
 import json
-import spacy
 
 # === CONFIGURATION ===
-CACHE_FILE = "simplify_cache.json"
-OUTPUT_CSV = "generalized_gift_ideas.csv"
+OPENAI_API_KEY = "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"  # ← Replace with your real key"  # Replace with your key
 INR_TO_GBP = 0.0085
+OUTPUT_CSV = "generalized_gift_ideas.csv"
+CACHE_FILE = "gpt_cache.json"
 
-# === Setup spaCy ===
-print("Loading spaCy model...")
-nlp = spacy.load("en_core_web_sm")
-
+# === Setup ===
+client = OpenAI(api_key=OPENAI_API_KEY)
 tqdm.pandas()
 
-# === Load cache if exists ===
+# === Load GPT cache if exists ===
 if os.path.exists(CACHE_FILE):
     with open(CACHE_FILE, "r", encoding="utf-8") as f:
-        simplify_cache = json.load(f)
+        gpt_cache = json.load(f)
 else:
-    simplify_cache = {}
+    gpt_cache = {}
 
-# === Load dataset ===
+# === Get path to Kaggle dataset ===
 print("📦 Downloading/loading dataset from Kaggle...")
 path = kagglehub.dataset_download("lokeshparab/amazon-products-dataset")
 
+# === Load and combine CSVs ===
 print("📂 Loading CSV files...")
 all_files = [f for f in os.listdir(path) if f.endswith('.csv')]
 dataframes = []
@@ -40,51 +42,48 @@ for file in all_files:
 
 df = pd.concat(dataframes, ignore_index=True)
 
+# === Keep only needed columns ===
 needed_cols = ['name', 'main_category', 'sub_category', 'ratings', 'actual_price']
 df = df[[c for c in needed_cols if c in df.columns]]
 
 print(f"\n🧾 Total products loaded: {len(df)}")
 print("🧪 Sample:", df['name'].iloc[0])
 
-# === Reduce dataset size by stratified sampling on 'main_category' ===
-sample_per_group = 1000  # Adjust this number based on desired dataset size
-
-sampled_dfs = []
-for group, group_df in df.groupby('main_category'):
-    sampled = group_df.sample(n=min(sample_per_group, len(group_df)), random_state=42)
-    sampled_dfs.append(sampled)
-
-df = pd.concat(sampled_dfs).reset_index(drop=True)
-
-print(f"\n🧾 Total products after sampling: {len(df)}")
-
-
-
-# === Simplify function using spaCy noun chunks ===
+# === GPT generalization function ===
 def generalize_product_name(name):
-    if name in simplify_cache:
-        return simplify_cache[name]
+    if name in gpt_cache:
+        return gpt_cache[name]  # Use cached result
 
-    doc = nlp(name)
-    # Extract noun chunks, choose the longest one (heuristic for "main product idea")
-    noun_chunks = [chunk.text.strip() for chunk in doc.noun_chunks if len(chunk.text.strip()) > 1]
-    if noun_chunks:
-        # Pick the longest noun chunk as simplified idea
-        simplified = max(noun_chunks, key=len)
-    else:
-        # fallback: take first 2 words
-        simplified = ' '.join(name.split()[:2])
+    prompt = (
+        f"Generalize the following product name into a broad gift idea type "
+        f"(e.g., 'Bluetooth Speaker', 'Home Gym Set', 'Leather Journal'). "
+        f"Only return the general gift type, nothing else.\n\nProduct: {name}\n\nGeneral Gift Idea:"
+    )
 
-    simplify_cache[name] = simplified
-    return simplified
+    try:
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {"role": "system", "content": "You are a product name generalizer. Output only short, generalized gift idea categories."},
+                {"role": "user", "content": prompt}
+            ],
+            temperature=0
+        )
+        generalized_name = response.choices[0].message.content.strip()
+        gpt_cache[name] = generalized_name  # Cache result
+        return generalized_name
+    except Exception as e:
+        print(f"❌ GPT failed on: {name[:40]}... | Error: {e}")
+        gpt_cache[name] = "Unknown"
+        return "Unknown"
 
-# === Run generalization on dataset ===
+# === Run GPT generalization ===
 print("\n🧠 Generating gift ideas...")
 df['gift_idea'] = df['name'].progress_apply(generalize_product_name)
 
-# === Save cache ===
+# === Save updated cache ===
 with open(CACHE_FILE, "w", encoding="utf-8") as f:
-    json.dump(simplify_cache, f, ensure_ascii=False, indent=2)
+    json.dump(gpt_cache, f, ensure_ascii=False, indent=2)
 
 # === Convert INR → GBP ===
 def inr_to_gbp(value):
@@ -114,8 +113,10 @@ grouped.rename(columns={
     'name': 'num_products'
 }, inplace=True)
 
+# === Clean output ===
 grouped = grouped[grouped['gift_idea'].notnull()]
 grouped = grouped[grouped['gift_idea'] != "Unknown"]
 
+# === Save output ===
 grouped.to_csv(OUTPUT_CSV, index=False)
 print(f"\n✅ Gift ideas saved to: {OUTPUT_CSV}")

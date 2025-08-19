@@ -1,3 +1,7 @@
+#this is the code to finetune/train the ai
+
+
+
 import pandas as pd
 from datasets import Dataset
 from transformers import T5Tokenizer, T5ForConditionalGeneration, Trainer, TrainingArguments

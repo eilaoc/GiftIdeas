@@ -1,3 +1,7 @@
+#i separated this file into simplifynames.py and keywordmap.py 
+# so i could get the keywords without running the simplification process every time
+
+
 import os
 import re
 import pandas as pd
