@@ -1,2 +1,4 @@
 generalized_gift_ideas.csv
+flan_t5_gift_idea_finetuned/
+t5_gift_idea_finetuned/
 *.csv
