@@ -3,10 +3,11 @@ from datasets import Dataset
 from transformers import T5Tokenizer, T5ForConditionalGeneration, Trainer, TrainingArguments
 
 # === CONFIG ===
-MODEL_NAME = "t5-small"
+#MODEL_NAME = "t5-base"
+MODEL_NAME = "google/flan-t5-base"
 TRAIN_FILE = "train.csv"
-OUTPUT_DIR = "./t5_gift_idea_finetuned"
-BATCH_SIZE = 8
+OUTPUT_DIR = "./flan_t5_gift_idea_finetuned"
+BATCH_SIZE = 6
 EPOCHS = 3
 MAX_INPUT_LENGTH = 128
 MAX_TARGET_LENGTH = 10
@@ -40,7 +41,6 @@ tokenized_dataset = dataset.map(preprocess_function, batched=True)
 # === Training arguments ===
 training_args = TrainingArguments(
     output_dir=OUTPUT_DIR,
-    evaluation_strategy="no",
     learning_rate=5e-5,
     per_device_train_batch_size=BATCH_SIZE,
     num_train_epochs=EPOCHS,

@@ -1,4 +1,4 @@
-# === This only works with python 3.12 or less so need to figure out a way to do that ===
+# === This only works with python 3.12 or less ===
 
 
 import os
@@ -11,7 +11,8 @@ from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
 import torch
 
 # === CONFIGURATION ===
-MODEL_NAME = "t5-small"  # Or your fine-tuned model path here
+#MODEL_NAME = "t5-small"
+MODEL_NAME = "flan_t5_gift_idea_finetuned"  # Or your fine-tuned model path here
 CACHE_FILE = "simplify_cache.json"
 OUTPUT_CSV = "generalized_gift_ideas.csv"
 INR_TO_GBP = 0.0085
@@ -71,14 +72,14 @@ def generalize_product_name(name):
         return simplify_cache[name]
 
     # Prepare input for T5/BART: prefix + text (you can customize prompt)
-    input_text = f"summarize: {name}"
+    input_text = f"simplify: {name}"
     inputs = tokenizer.encode(input_text, return_tensors="pt", max_length=128, truncation=True).to(device)
 
     # Generate output sequence
     with torch.no_grad():
         outputs = model.generate(
             inputs, 
-            max_length=10,  # gift ideas are short
+            max_length=15,  # gift ideas are short
             num_beams=5,
             early_stopping=True
         )
@@ -111,17 +112,19 @@ grouped = df.groupby('gift_idea').agg({
     'ratings': 'mean',
     'main_category': lambda x: list(set(x.dropna())),
     'sub_category': lambda x: list(set(x.dropna())),
-    'name': 'count'
+    'name': lambda x: list(x)  # Save all original product names
 }).reset_index()
 
+# Rename columns
 grouped.rename(columns={
     'price_gbp': 'average_price_gbp',
     'ratings': 'average_rating',
     'main_category': 'main_categories',
     'sub_category': 'sub_categories',
-    'name': 'num_products'
+    'name': 'original_product_names',  # <-- updated
 }, inplace=True)
 
+# Remove empty or unknown gift ideas
 grouped = grouped[grouped['gift_idea'].notnull()]
 grouped = grouped[grouped['gift_idea'] != "Unknown"]
 
