@@ -1,4 +1,4 @@
-# === This only works with python 3.12 or less ===
+# === This only works with python 3.12 or less, I used python 3.11.5 ===
 #This is the one that works! Uses flan-t5 opensource nlp trained with my data
 
 
