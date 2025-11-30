@@ -1,6 +1,7 @@
 # GiftIdeas
 Gift idea generator
 
+A research project into different forms of NLP methods and their applications.
 
 Amazon Dataset - https://www.kaggle.com/datasets/lokeshparab/amazon-products-dataset/data?select=All+Exercise+and+Fitness.csv
 
