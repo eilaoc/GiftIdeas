@@ -8,7 +8,7 @@ import kagglehub
 import json
 
 # === CONFIGURATION ===
-OPENAI_API_KEY = "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"  # ← Replace with your real key"  # Replace with your key
+OPENAI_API_KEY = ""
 INR_TO_GBP = 0.0085
 OUTPUT_CSV = "generalized_gift_ideas.csv"
 CACHE_FILE = "gpt_cache.json"
