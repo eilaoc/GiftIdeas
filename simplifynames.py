@@ -1,4 +1,4 @@
-#this was used to generate a small training file of simplified names for the ai
+#this was used to generate a small training file of simplified names for the ai, very very simple simplification method
 
 
 import os

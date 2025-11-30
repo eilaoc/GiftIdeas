@@ -1,12 +1,13 @@
 #This is the code to put the subcategories into a graph joining the similar categories
 #It first extracts the subcategories
-#Then generate embeddings for the subcategories (represent the word with a number in high dimensional space, clustering)
+#Then generate embeddings using sentence tranformers for the subcategories (represent the word with a number in high dimensional space, similar to clustering)
 #Then calculate the cosine similarity between embeddings, similar numbers are clustered together
     #Example (simplified, 3 dimensions instead of 768)
         #"Men's Clothing" → [0.8, 0.1, 0.6]
         #"Women's Clothing" → [0.75, 0.15, 0.58]
         #"Makeup" → [0.1, 0.9, 0.2]
     #Now we can compute the cosine similarity between them:
+        #similarity(a,b)= a.b/||a||b||
         #Clothing vs Clothing → 0.98 (very close)
         #Clothing vs Makeup → 0.34 (not close)
     #If the similarity is over the threshold, add an edge
